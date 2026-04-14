@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<!-- Applicazione "Tris" (Tic-Tac-Toe) a pagina singola.
+     Funzionalità principali:
+       - Modalità 2 giocatori o giocatore vs computer
+       - Tre livelli di difficoltà per l'AI (Facile / Medio / Difficile)
+       - Punteggio cumulativo tra le partite
+       - Nomi dei giocatori modificabili inline
+       - Algoritmo minimax per la difficoltà massima (IA imbattibile)
+-->
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tris</title>
+  <style>
+    /* Reset universale: elimina margini e padding predefiniti del browser
+       e imposta box-sizing: border-box su tutti gli elementi */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Variabili CSS globali: definiscono la palette colori scura del tema.
+       --x-color: rosso per il simbolo X
+       --o-color: azzurro per il simbolo O
+       --bg / --surface / --card: sfumature di sfondo sempre più chiare */
+    :root {
+      --bg: #0f0f1a;
+      --surface: #1a1a2e;
+      --card: #16213e;
+      --x-color: #e94560;
+      --o-color: #53d8fb;
+      --text: #eaeaea;
+      --muted: #7a7a9a;
+      --radius: 12px;
+    }
+
+    /* Layout principale: colonna centrata verticalmente con padding */
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+    }
+
+    /* Titolo principale con gradiente X (rosso) → O (azzurro) */
+    h1 {
+      font-size: 2.8rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      background: linear-gradient(135deg, var(--x-color), var(--o-color));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+
+    .subtitle { color: var(--muted); font-size: .95rem; margin-bottom: 22px; }
+
+    /* ---- Blocco istruzioni collassabile (<details>/<summary>) ---- */
+    details {
+      background: var(--card);
+      border: 1px solid #2a2a4a;
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 520px;
+      margin-bottom: 22px;
+      overflow: hidden;
+    }
+    summary {
+      cursor: pointer; padding: 14px 18px; font-weight: 600; font-size: 1rem;
+      user-select: none; list-style: none; display: flex; align-items: center; gap: 10px;
+    }
+    /* Triangolino che ruota di 90° quando il blocco è aperto */
+    summary::before { content: '▶'; font-size: .7rem; transition: transform .2s; }
+    details[open] summary::before { transform: rotate(90deg); }
+    .istruzioni { padding: 0 18px 18px; line-height: 1.7; color: #b0b0cc; font-size: .92rem; }
+    .istruzioni li { margin-left: 18px; margin-bottom: 4px; }
+
+    /* ---- Riga selettore modalità (2p / vs AI) e difficoltà ---- */
+    .selector-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      width: 100%;
+      max-width: 520px;
+      flex-wrap: wrap;
+    }
+
+    /* Contenitore "segmented control": simula i radio button come bottoni uniti */
+    .seg {
+      display: flex;
+      background: var(--card);
+      border: 1px solid #2a2a4a;
+      border-radius: 9px;
+      overflow: hidden;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    /* Ogni label occupa spazio uguale; il colore diventa chiaro se selezionata */
+    .seg label {
+      flex: 1;
+      text-align: center;
+      padding: 9px 6px;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--muted);
+      transition: background .2s, color .2s;
+      user-select: none;
+    }
+
+    /* L'input radio vero e proprio è nascosto: l'utente clicca la label */
+    .seg input[type=radio] { display: none; }
+
+    /* Opzione selezionata: sfondo evidenziato e testo pieno */
+    .seg input[type=radio]:checked + label {
+      background: #2a2a4a;
+      color: var(--text);
+    }
+
+    .seg label:hover { background: #1e1e36; }
+
+    /* La riga difficoltà viene nascosta (opacity 0 + no eventi) in modalità 2p */
+    #diff-row { transition: opacity .25s; }
+    #diff-row.hidden { opacity: 0; pointer-events: none; }
+
+    /* ---- Schede punteggio (X, Pareggi, O) ---- */
+    .score-board {
+      display: flex; gap: 16px; margin-bottom: 22px; width: 100%; max-width: 520px;
+    }
+    .score-card {
+      flex: 1; background: var(--card); border: 2px solid transparent;
+      border-radius: var(--radius); padding: 14px; text-align: center;
+      transition: border-color .3s, transform .2s;
+    }
+    /* La carta del giocatore di turno si solleva leggermente con un bordo colorato */
+    .score-card.active-x { border-color: var(--x-color); transform: translateY(-3px); }
+    .score-card.active-o { border-color: var(--o-color); transform: translateY(-3px); }
+    .score-card .label { font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 2px; }
+    .score-card .symbol { font-size: 1.8rem; font-weight: 900; line-height: 1; }
+    .score-card.x-card .symbol { color: var(--x-color); }
+    .score-card.o-card .symbol { color: var(--o-color); }
+    .score-card .points { font-size: 2rem; font-weight: 700; margin-top: 4px; }
+    .score-card.draw-card .symbol { color: var(--muted); font-size: 1.4rem; }
+    .score-card.draw-card .points { font-size: 1.6rem; color: var(--muted); }
+
+    /* ---- Messaggio di stato (turno, vittoria, pareggio, "sta pensando") ---- */
+    .status {
+      font-size: 1.1rem; font-weight: 600; min-height: 32px;
+      margin-bottom: 18px; text-align: center; transition: color .3s;
+    }
+    .status.win     { color: #ffe066; }         /* vittoria: giallo evidenziato */
+    .status.draw    { color: var(--muted); }     /* pareggio: grigio attenuato  */
+    .status.thinking{ color: var(--o-color); font-style: italic; } /* AI al lavoro */
+
+    /* ---- Griglia di gioco 3×3 ---- */
+    .grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+      width: 100%; max-width: 360px; margin-bottom: 24px;
+    }
+    /* Ogni cella è quadrata (aspect-ratio 1:1); .taken blocca i click successivi */
+    .cell {
+      aspect-ratio: 1; background: var(--surface); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 3.2rem; font-weight: 900; cursor: pointer;
+      transition: background .15s, transform .1s;
+      border: 2px solid #2a2a4a; user-select: none;
+    }
+    /* Hover solo su celle libere e non bloccate */
+    .cell:hover:not(.taken):not(.blocked) { background: #22223a; transform: scale(1.04); }
+    /* Celle già occupate o bloccate durante il turno AI: cursore disabilitato */
+    .cell.taken, .cell.blocked { cursor: default; }
+    .cell.X { color: var(--x-color); }
+    .cell.O { color: var(--o-color); }
+    /* Celle vincenti: bordo giallo + animazione pulsante */
+    .cell.winning {
+      background: #2a1a30; border-color: #ffe066;
+      animation: pulse .6s ease-in-out infinite alternate;
+    }
+    @keyframes pulse {
+      from { box-shadow: 0 0 0 0 rgba(255,224,102,.3); }
+      to   { box-shadow: 0 0 0 8px rgba(255,224,102,0); }
+    }
+
+    /* ---- Bottoni azione ---- */
+    .btn-row { display: flex; gap: 12px; }
+    button {
+      padding: 10px 26px; border: none; border-radius: 8px;
+      font-size: .95rem; font-weight: 600; cursor: pointer;
+      transition: opacity .2s, transform .1s;
+    }
+    button:hover { opacity: .85; transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    /* "Prossima partita": gradiente rosso, visibile solo a fine round */
+    .btn-next  { background: linear-gradient(135deg, var(--x-color), #a83258); color: #fff; }
+    /* "Reset Score": tono neutro, sempre visibile */
+    .btn-reset { background: var(--card); color: var(--muted); border: 1px solid #2a2a4a; }
+
+    /* ---- Campo testo per rinominare i giocatori (inline nelle schede) ----
+       In modalità AI il campo "O" diventa readonly e perde il bordo */
+    .name-input {
+      background: transparent; border: none;
+      border-bottom: 1px dashed var(--muted);
+      color: var(--text); font-size: .85rem; font-weight: 600;
+      width: 90px; text-align: center; outline: none; cursor: pointer;
+    }
+    .name-input:focus { border-bottom-color: var(--o-color); }
+    .name-input[readonly] { border-bottom-color: transparent; cursor: default; color: var(--muted); }
+
+    /* ---- Badge difficoltà visualizzato nella scheda del computer ---- */
+    .diff-badge {
+      font-size: .7rem; font-weight: 700; padding: 2px 7px; border-radius: 99px;
+      text-transform: uppercase; letter-spacing: .1em; display: inline-block; margin-top: 3px;
+    }
+    .diff-easy  { background: #1a3a1a; color: #6fcf6f; }  /* verde per Facile  */
+    .diff-med   { background: #3a2a0a; color: #f2c94c; }  /* giallo per Medio  */
+    .diff-hard  { background: #3a0a0a; color: #eb5757; }  /* rosso per Difficile */
+  </style>
+</head>
+<body>
+
+<h1>TRIS</h1>
+<p class="subtitle">Il classico gioco del tris — tre in fila vince!</p>
+
+<!-- Pannello istruzioni: collassabile tramite l'elemento nativo <details> -->
+<details>
+  <summary>Come si gioca</summary>
+  <div class="istruzioni">
+    <ul>
+      <li>Il gioco si svolge su una griglia <strong>3×3</strong>.</li>
+      <li>I giocatori si alternano: il primo usa <strong style="color:var(--x-color)">X</strong>, il secondo usa <strong style="color:var(--o-color)">O</strong>.</li>
+      <li>Clicca su una casella vuota per piazzare il tuo segno.</li>
+      <li>Vince chi allinea <strong>3 segni uguali</strong> in orizzontale, verticale o diagonale.</li>
+      <li>Se tutte le caselle si riempiono senza un vincitore è <strong>pareggio</strong>.</li>
+      <li>In modalità <strong>vs Computer</strong> scegli la difficoltà: Facile (casuale), Medio (semi-intelligente), Difficile (imbattibile — minimax).</li>
+      <li>Lo <strong>score</strong> si accumula partita dopo partita — usa "Reset Score" per azzerarlo.</li>
+      <li>Puoi <strong>rinominare i giocatori</strong> cliccando sul nome nella scheda.</li>
+    </ul>
+  </div>
+</details>
+
+<!-- Selettore modalità: radio button "2 Giocatori" / "vs Computer"
+     Al cambio viene chiamata changeMode() che mostra/nasconde la riga difficoltà -->
+<div class="selector-row">
+  <div class="seg">
+    <input type="radio" name="mode" id="mode-2p" value="2p" checked onchange="changeMode()">
+    <label for="mode-2p">2 Giocatori</label>
+    <input type="radio" name="mode" id="mode-ai" value="ai" onchange="changeMode()">
+    <label for="mode-ai">vs Computer</label>
+  </div>
+
+  <!-- Riga difficoltà: visibile solo in modalità vs Computer (gestita da JS con classe .hidden) -->
+  <div class="seg hidden" id="diff-row">
+    <input type="radio" name="diff" id="diff-easy" value="easy" checked onchange="changeDiff()">
+    <label for="diff-easy">Facile</label>
+    <input type="radio" name="diff" id="diff-med" value="med" onchange="changeDiff()">
+    <label for="diff-med">Medio</label>
+    <input type="radio" name="diff" id="diff-hard" value="hard" onchange="changeDiff()">
+    <label for="diff-hard">Difficile</label>
+  </div>
+</div>
+
+<!-- Score board: tre schede affiancate (X | Pareggi | O).
+     I nomi sono input editabili; in modalità AI quello di O è readonly. -->
+<div class="score-board">
+  <div class="score-card x-card" id="card-x">
+    <div class="label"><input class="name-input" id="name-x" value="Giocatore 1" maxlength="14" /></div>
+    <div class="symbol">X</div>
+    <div class="points" id="score-x">0</div>
+  </div>
+  <div class="score-card draw-card" id="card-draw">
+    <div class="label">Pareggi</div>
+    <div class="symbol">—</div>
+    <div class="points" id="score-draw">0</div>
+  </div>
+  <div class="score-card o-card" id="card-o">
+    <div class="label"><input class="name-input" id="name-o" value="Giocatore 2" maxlength="14" /></div>
+    <div class="symbol">O</div>
+    <div class="points" id="score-o">0</div>
+    <!-- Badge difficoltà: appare solo in modalità vs Computer -->
+    <div id="diff-badge" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Messaggio di stato dinamico: aggiornato da JS a ogni mossa -->
+<div class="status" id="status"></div>
+
+<!-- Griglia 3×3: ogni cella ha data-i con l'indice 0–8 usato dall'array board[] -->
+<div class="grid" id="grid">
+  <div class="cell" data-i="0"></div>
+  <div class="cell" data-i="1"></div>
+  <div class="cell" data-i="2"></div>
+  <div class="cell" data-i="3"></div>
+  <div class="cell" data-i="4"></div>
+  <div class="cell" data-i="5"></div>
+  <div class="cell" data-i="6"></div>
+  <div class="cell" data-i="7"></div>
+  <div class="cell" data-i="8"></div>
+</div>
+
+<!-- Bottoni: "Prossima partita" compare solo a fine round; "Reset Score" sempre visibile -->
+<div class="btn-row">
+  <button class="btn-next" id="btn-next" style="display:none" onclick="nextRound()">Prossima partita</button>
+  <button class="btn-reset" onclick="resetScore()">Reset Score</button>
+</div>
+
+<script>
+  /* =====================================================================
+     COSTANTI
+     ===================================================================== */
+
+  /* Tutte le combinazioni vincenti sul tabellone 3×3 (indici 0–8):
+     - Righe:     [0,1,2], [3,4,5], [6,7,8]
+     - Colonne:   [0,3,6], [1,4,7], [2,5,8]
+     - Diagonali: [0,4,8], [2,4,6]                                        */
+  const WINS = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  /* =====================================================================
+     STATO DEL GIOCO
+     ===================================================================== */
+
+  let board        = Array(9).fill(null); // tabellone: null = cella vuota, 'X'/'O' = occupata
+  let current      = 'X';                // simbolo del giocatore di turno
+  let gameOver     = false;              // true quando la partita è conclusa
+  let score        = { X: 0, O: 0, D: 0 }; // punteggi cumulativi (D = pareggi/Draw)
+  let roundStarter = 'X';               // chi ha iniziato il round corrente (si alterna)
+  let vsAI         = false;             // true se la modalità è giocatore vs computer
+  let difficulty   = 'easy';            // livello difficoltà AI: 'easy' | 'med' | 'hard'
+  const AI_SYMBOL  = 'O';              // simbolo usato dall'IA
+  const HU_SYMBOL  = 'X';             // simbolo usato dall'umano
+
+  /* Riferimenti agli elementi DOM usati frequentemente */
+  const cells    = document.querySelectorAll('.cell');
+  const statusEl = document.getElementById('status');
+  const btnNext  = document.getElementById('btn-next');
+
+  /* Registra il click su ciascuna cella; dataset.i fornisce l'indice 0–8 */
+  cells.forEach(cell => cell.addEventListener('click', () => humanMove(+cell.dataset.i)));
+
+  /* =====================================================================
+     GESTIONE MODALITÀ E DIFFICOLTÀ (UI)
+     ===================================================================== */
+
+  /* Chiamata quando l'utente commuta tra "2 Giocatori" e "vs Computer".
+     Mostra/nasconde la riga difficoltà, aggiorna il nome di O e azzera lo score. */
+  function changeMode() {
+    vsAI = document.getElementById('mode-ai').checked;
+    const diffRow  = document.getElementById('diff-row');
+    const nameO    = document.getElementById('name-o');
+    const badge    = document.getElementById('diff-badge');
+    if (vsAI) {
+      diffRow.classList.remove('hidden'); // mostra il selettore difficoltà
+      nameO.value    = 'Computer';
+      nameO.readOnly = true;              // impedisce la modifica del nome AI
+      badge.style.display = 'inline-block';
+      updateDiffBadge();
+    } else {
+      diffRow.classList.add('hidden');    // nasconde il selettore difficoltà
+      nameO.value    = 'Giocatore 2';
+      nameO.readOnly = false;
+      badge.style.display = 'none';
+    }
+    resetScore(); // ogni cambio di modalità riparte da zero
+  }
+
+  /* Chiamata quando l'utente seleziona un livello di difficoltà.
+     Aggiorna la variabile globale e rinnova il badge visivo, poi azzera lo score. */
+  function changeDiff() {
+    difficulty = document.querySelector('input[name=diff]:checked').value;
+    updateDiffBadge();
+    resetScore();
+  }
+
+  /* Aggiorna il testo e la classe CSS del badge difficoltà nella scheda O */
+  function updateDiffBadge() {
+    const badge = document.getElementById('diff-badge');
+    const map = { easy: ['Facile','diff-easy'], med: ['Medio','diff-med'], hard: ['Difficile','diff-hard'] };
+    const [label, cls] = map[difficulty];
+    badge.className   = 'diff-badge ' + cls;
+    badge.textContent = label;
+  }
+
+  /* =====================================================================
+     LOGICA DI GIOCO
+     ===================================================================== */
+
+  /* Gestisce il click dell'utente su una cella (indice i).
+     Ignora il click se: partita finita, cella già occupata,
+     oppure è il turno dell'IA in modalità vs computer. */
+  function humanMove(i) {
+    if (gameOver || board[i]) return;
+    if (vsAI && current === AI_SYMBOL) return; // non permettere click durante il turno AI
+    applyMove(i);
+    // dopo la mossa umana, se la partita non è finita e tocca all'IA, la schedula
+    if (!gameOver && vsAI && current === AI_SYMBOL) scheduleAI();
+  }
+
+  /* Simula il "tempo di riflessione" del computer (420 ms) e poi esegue la mossa AI.
+     Durante l'attesa la griglia è bloccata e lo status mostra "sta pensando". */
+  function scheduleAI() {
+    blockGrid(true);
+    statusEl.textContent = 'Il computer sta pensando…';
+    statusEl.className = 'status thinking';
+    setTimeout(() => {
+      blockGrid(false);         // sblocca la griglia dopo il ritardo
+      const i = aiPick();       // sceglie la cella migliore secondo la difficoltà
+      applyMove(i);
+    }, 420);
+  }
+
+  /* Blocca o sblocca le celle libere aggiungendo/rimuovendo la classe .blocked.
+     Le celle già occupate (.taken) non vengono toccate. */
+  function blockGrid(on) {
+    cells.forEach(c => c.classList.toggle('blocked', on && !c.classList.contains('taken')));
+  }
+
+  /* Esegue concretamente una mossa sull'indice i:
+     1. Aggiorna l'array board[]
+     2. Aggiorna la cella visiva (testo + classi CSS)
+     3. Controlla vittoria, pareggio o continua il turno                   */
+  function applyMove(i) {
+    board[i] = current;
+    const cell = cells[i];
+    cell.textContent = current;
+    cell.classList.add('taken', current); // 'taken' blocca click, 'X'/'O' colora il simbolo
+
+    const winLine = checkWinFor(current);
+    if (winLine) {
+      // vittoria: evidenzia le celle vincenti con l'animazione pulse
+      winLine.forEach(idx => cells[idx].classList.add('winning'));
+      const name = current === 'X'
+        ? document.getElementById('name-x').value
+        : document.getElementById('name-o').value;
+      statusEl.textContent = `${name} (${current}) ha vinto!`;
+      statusEl.className = 'status win';
+      score[current]++;           // incrementa il punteggio del vincitore
+      updateScoreDisplay();
+      endGame();
+    } else if (board.every(Boolean)) {
+      // pareggio: tutte le 9 celle occupate senza una tripletta
+      statusEl.textContent = 'Pareggio! Nessun vincitore.';
+      statusEl.className = 'status draw';
+      score.D++;
+      updateScoreDisplay();
+      endGame();
+    } else {
+      // partita in corso: passa il turno all'altro giocatore
+      current = current === 'X' ? 'O' : 'X';
+      updateStatusTurn();
+      highlightActive(); // evidenzia la scheda del giocatore di turno
+    }
+  }
+
+  /* =====================================================================
+     INTELLIGENZA ARTIFICIALE
+     ===================================================================== */
+
+  /* Sceglie la cella dove l'IA deve giocare in base al livello difficoltà:
+     - easy: casuale tra le celle libere
+     - med:  50% minimax, 50% casuale (comportamento imprevedibile)
+     - hard: sempre minimax (IA imbattibile)                               */
+  function aiPick() {
+    const empty = board.map((v,i) => v === null ? i : -1).filter(i => i >= 0);
+    if (difficulty === 'easy') return randomPick(empty);
+    if (difficulty === 'med')  return Math.random() < 0.5 ? minimaxPick() : randomPick(empty);
+    return minimaxPick(); // hard
+  }
+
+  /* Sceglie una cella libera a caso tra quelle nell'array empty[] */
+  function randomPick(empty) {
+    return empty[Math.floor(Math.random() * empty.length)];
+  }
+
+  /* Trova la mossa ottimale per l'IA esplorando tutte le possibilità con minimax.
+     Scorre le celle libere, simula ogni mossa e sceglie quella con il punteggio
+     minimax più alto (massimizzante per l'IA). */
+  function minimaxPick() {
+    let best = -Infinity, bestIdx = -1;
+    board.forEach((v, i) => {
+      if (v !== null) return;        // salta le celle già occupate
+      board[i] = AI_SYMBOL;          // simula la mossa
+      const score = minimax(board, 0, false); // calcola il punteggio della posizione
+      board[i] = null;               // annulla la mossa simulata
+      if (score > best) { best = score; bestIdx = i; }
+    });
+    return bestIdx;
+  }
+
+  /* Algoritmo minimax ricorsivo: esplora tutto l'albero delle mosse possibili
+     e restituisce un punteggio:
+       +10 - depth  → vittoria IA (preferisce vincere prima)
+       -10 + depth  → vittoria umano (preferisce perdere più tardi se inevitabile)
+       0            → pareggio
+     isMax = true  → turno IA  (massimizza il punteggio)
+     isMax = false → turno umano (minimizza il punteggio)                  */
+  function minimax(b, depth, isMax) {
+    const winner = winnerOf(b);
+    if (winner === AI_SYMBOL) return 10 - depth;  // IA ha vinto
+    if (winner === HU_SYMBOL) return depth - 10;  // umano ha vinto
+    if (b.every(Boolean)) return 0;               // pareggio: nessuna cella libera
+
+    if (isMax) {
+      // turno IA: cerca la mossa con il punteggio massimo
+      let best = -Infinity;
+      b.forEach((v, i) => {
+        if (v !== null) return;
+        b[i] = AI_SYMBOL;
+        best = Math.max(best, minimax(b, depth + 1, false));
+        b[i] = null;
+      });
+      return best;
+    } else {
+      // turno umano: cerca la mossa con il punteggio minimo (peggiore per l'IA)
+      let best = Infinity;
+      b.forEach((v, i) => {
+        if (v !== null) return;
+        b[i] = HU_SYMBOL;
+        best = Math.min(best, minimax(b, depth + 1, true));
+        b[i] = null;
+      });
+      return best;
+    }
+  }
+
+  /* Verifica se esiste un vincitore nel tabellone b[].
+     Scorre tutte le combinazioni vincenti (WINS) e restituisce il simbolo
+     vincente ('X' o 'O') oppure null se nessuno ha ancora vinto. */
+  function winnerOf(b) {
+    for (const [a,c,e] of WINS) {
+      if (b[a] && b[a] === b[c] && b[c] === b[e]) return b[a];
+    }
+    return null;
+  }
+
+  /* =====================================================================
+     FUNZIONI DI SUPPORTO (UI)
+     ===================================================================== */
+
+  /* Controlla se il simbolo sym forma una tripletta nel board[] corrente.
+     Restituisce l'array degli indici vincenti, oppure null. */
+  function checkWinFor(sym) {
+    return WINS.find(line => line.every(i => board[i] === sym)) || null;
+  }
+
+  /* Aggiorna il messaggio di stato con il nome e colore del giocatore di turno */
+  function updateStatusTurn() {
+    const color = current === 'X' ? 'var(--x-color)' : 'var(--o-color)';
+    const name  = current === 'X'
+      ? document.getElementById('name-x').value
+      : document.getElementById('name-o').value;
+    statusEl.innerHTML = `Tocca a <span style="color:${color}">${name} (${current})</span>`;
+    statusEl.className = 'status';
+  }
+
+  /* Aggiunge/rimuove le classi active-x/active-o sulle schede punteggio
+     per indicare visivamente a chi tocca giocare (bordo colorato + alzata). */
+  function highlightActive() {
+    document.getElementById('card-x').classList.toggle('active-x', current === 'X');
+    document.getElementById('card-o').classList.toggle('active-o', current === 'O');
+  }
+
+  /* Chiude il round: imposta gameOver, mostra il bottone "Prossima partita"
+     e rimuove l'evidenziazione attiva da entrambe le schede. */
+  function endGame() {
+    gameOver = true;
+    btnNext.style.display = 'inline-block';
+    document.getElementById('card-x').classList.remove('active-x');
+    document.getElementById('card-o').classList.remove('active-o');
+  }
+
+  /* Aggiorna i contatori visivi delle schede punteggio (X, O, Pareggi) */
+  function updateScoreDisplay() {
+    document.getElementById('score-x').textContent    = score.X;
+    document.getElementById('score-o').textContent    = score.O;
+    document.getElementById('score-draw').textContent = score.D;
+  }
+
+  /* Avvia un nuovo round senza azzerare lo score:
+     - ripulisce tutte le celle dal DOM e da board[]
+     - alterna il giocatore che inizia (chi ha iniziato l'ultimo round cede il via)
+     - se in modalità AI e tocca all'IA iniziare, la schedula subito             */
+  function nextRound() {
+    board    = Array(9).fill(null);
+    gameOver = false;
+    cells.forEach(c => { c.textContent = ''; c.className = 'cell'; });
+    roundStarter = roundStarter === 'X' ? 'O' : 'X'; // alternanza del primo mossante
+    current  = roundStarter;
+    btnNext.style.display = 'none';
+    updateStatusTurn();
+    highlightActive();
+    // se in modalità AI e tocca all'AI iniziare, fallo subito
+    if (vsAI && current === AI_SYMBOL) scheduleAI();
+  }
+
+  /* Azzera completamente score e stato di gioco: usato sia dal bottone "Reset Score"
+     sia internamente a changeMode() e changeDiff() per ripartire puliti. */
+  function resetScore() {
+    score        = { X: 0, O: 0, D: 0 };
+    roundStarter = 'X';
+    updateScoreDisplay();
+    board    = Array(9).fill(null);
+    gameOver = false;
+    current  = 'X';
+    cells.forEach(c => { c.textContent = ''; c.className = 'cell'; });
+    btnNext.style.display = 'none';
+    updateStatusTurn();
+    highlightActive();
+  }
+
+  /* =====================================================================
+     INIZIALIZZAZIONE
+     Al caricamento della pagina mostra il turno iniziale (X) e
+     imposta l'evidenziazione sulla scheda di X.
+     ===================================================================== */
+  updateStatusTurn();
+  highlightActive();
+</script>
+</body>
+</html>
